@@ -26,7 +26,6 @@ lazy val `hello-world-impl` = (project in file("hello-world-impl"))
       scalaTest
     )
   )
-  .settings(lagomForkedTestSettings)
   .dependsOn(`hello-world-api`)
 
 

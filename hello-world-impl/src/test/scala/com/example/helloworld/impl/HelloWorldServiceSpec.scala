@@ -1,15 +1,19 @@
 package com.example.helloworld.impl
 
+import akka.NotUsed
+import akka.stream.scaladsl.Source
 import com.lightbend.lagom.scaladsl.server.LocalServiceLocator
 import com.lightbend.lagom.scaladsl.testkit.ServiceTest
-import org.scalatest.{AsyncWordSpec, BeforeAndAfterAll, Matchers}
+import org.scalatest.{ BeforeAndAfterAll, AsyncWordSpec, Matchers }
 import com.example.helloworld.api._
+import play.api.libs.json._
 
 class HelloWorldServiceSpec extends AsyncWordSpec with Matchers with BeforeAndAfterAll {
 
   private val server = ServiceTest.startServer(
     ServiceTest.defaultSetup
-      .withCassandra()
+      .withCassandra(false)
+      .withCluster(false)
   ) { ctx =>
     new HelloWorldApplication(ctx) with LocalServiceLocator
   }
@@ -21,18 +25,22 @@ class HelloWorldServiceSpec extends AsyncWordSpec with Matchers with BeforeAndAf
   "Hello World service" should {
 
     "say hello" in {
-      client.hello("Alice").invoke().map { answer =>
-        answer should ===("Hello, Alice!")
+      val req = Request1234("message"*2, 565656, "fake-md5")
+      val source: Source[String, NotUsed] = objToSource(req)
+        .concat(Source.maybe)
+
+      client.hello("Alice").invoke(source)
+      .map { rsp =>
+        println(s" - - - - - - - - - - - - - - - - - - - - - Stream response: ${rsp}")
+        rsp shouldBe a[Response1234]
       }
     }
 
-    "allow responding with a custom message" in {
-      for {
-        _ <- client.useGreeting("Bob").invoke(GreetingMessage("Hi"))
-        answer <- client.hello("Bob").invoke()
-      } yield {
-        answer should ===("Hi, Bob!")
-      }
+    def objToSource[T: OFormat](obj: T): Source[String, NotUsed] = {
+      val str = Json.stringify(Json.toJsObject(obj))
+//      println(s"* * * * * * * *  - $str")
+      val cmdPayload = str.grouped(128).toList
+      Source(cmdPayload)
     }
   }
 }
